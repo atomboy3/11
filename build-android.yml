@@ -1,0 +1,61 @@
+name: Build Android APK
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:   # Кнопка "Run workflow" в GitHub UI
+
+jobs:
+  build:
+    name: Build DichopticTetris APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    steps:
+
+      # ── 1. Получить код ──────────────────────────────────────────────────
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          lfs: true
+
+      # ── 2. Кэш библиотеки Unity (ускоряет повторные сборки) ─────────────
+      - name: Cache Unity Library
+        uses: actions/cache@v4
+        with:
+          path: Library
+          key: Library-Android-${{ hashFiles('Assets/**', 'Packages/**', 'ProjectSettings/**') }}
+          restore-keys: |
+            Library-Android-
+            Library-
+
+      # ── 3. Сборка через GameCI ───────────────────────────────────────────
+      - name: Build Android (GameCI)
+        uses: game-ci/unity-builder@v4
+        env:
+          UNITY_LICENSE:    ${{ secrets.UNITY_LICENSE }}
+          UNITY_EMAIL:      ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD:   ${{ secrets.UNITY_PASSWORD }}
+        with:
+          targetPlatform:       Android
+          unityVersion:         auto          # читает из ProjectSettings/ProjectVersion.txt
+          androidExportType:    androidPackage  # собирает .apk
+          androidKeystoreName:  ""            # debug-подпись (достаточно для установки)
+          buildMethod:          BuildScript.BuildAndroid
+          versioning:           Semantic
+          androidVersionCode:   ${{ github.run_number }}
+
+      # ── 4. Загрузить APK как артефакт ────────────────────────────────────
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: DichopticTetris-APK
+          path: build/Android/*.apk
+          retention-days: 14    # хранится 14 дней, потом удаляется
+
+      # ── 5. Показать размер APK в логе ────────────────────────────────────
+      - name: Show APK info
+        run: |
+          echo "=== Build complete ==="
+          find build/Android -name "*.apk" -exec ls -lh {} \;
